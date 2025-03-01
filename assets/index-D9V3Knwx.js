@@ -327,7 +327,7 @@ class LottoList extends Component {
               ${this.props.lottoList.map((lotto) => {
       return `
               <span class="lotto-detail-item-number"
-                ><img src="../assets/ic_admit_one.png" alt='로또 번호 이미지'/>${lotto.numbers.join(
+                ><img src="./assets/ic_admit_one.png" alt='로또 번호 이미지'/>${lotto.numbers.join(
         ", "
       )}</span
               >
