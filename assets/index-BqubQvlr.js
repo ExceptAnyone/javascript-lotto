@@ -48,14 +48,16 @@ const MIN_LOTTO_NUMBER = 1;
 const MAX_LOTTO_NUMBER = 45;
 const LOTTO_LENGTH = 6;
 const LOTTO_PRICE = 1e3;
+const PERCENTAGE_MULTIPLIER = 100;
+const EARNING_RATE_DECIMALS = 1;
+const LOTTO_NUMBER_LENGTH = 6;
+const BONUS_NUMBER_LENGTH = 1;
 const NO_WINNING = "당첨 없음";
 const COMMAND = {
   yes: "y",
   no: "n"
 };
 const ERROR_MESSAGES_DEFAULT = "[ERROR]";
-const LOTTO_NUMBER_LENGTH = 6;
-const BONUS_NUMBER_LENGTH = 1;
 const appendErrorPrefix = (message) => `${ERROR_MESSAGES_DEFAULT} ${message}`;
 const ERROR_MESSAGES = {
   purchaseAmount: {
@@ -122,21 +124,21 @@ class Validator {
       throw new Error(ERROR_MESSAGES.purchaseAmount.thousandUnit);
     }
   }
-  static validateWinNumbers(winNumbers2) {
-    if (winNumbers2.length !== 6 || winNumbers2.some(
+  static validateWinNumbers(winNumbers) {
+    if (winNumbers.length !== 6 || winNumbers.some(
       (number) => !__privateMethod(this, _Validator_static, checkIsInLottoNumberRange_fn).call(this, number) || !__privateMethod(this, _Validator_static, checkIsPositiveInteger_fn).call(this, number)
     )) {
       throw new Error(ERROR_MESSAGES.winNumber.range);
     }
-    if (!checkUniqueArray(winNumbers2)) {
+    if (!checkUniqueArray(winNumbers)) {
       throw new Error(ERROR_MESSAGES.winNumber.unique);
     }
   }
-  static validateBonusNumber(bonusNumber, winNumbers2) {
+  static validateBonusNumber(bonusNumber, winNumbers) {
     if (!__privateMethod(this, _Validator_static, checkIsPositiveInteger_fn).call(this, bonusNumber) || !__privateMethod(this, _Validator_static, checkIsInLottoNumberRange_fn).call(this, bonusNumber)) {
       throw new Error(ERROR_MESSAGES.bonusNumber.range);
     }
-    if (winNumbers2.includes(bonusNumber)) {
+    if (winNumbers.includes(bonusNumber)) {
       throw new Error(ERROR_MESSAGES.bonusNumber.unique);
     }
   }
@@ -179,6 +181,16 @@ createLottoNumber_fn = function() {
   );
 };
 __privateAdd(LottoShop, _LottoShop_static);
+class LottoPurchase {
+  constructor(setLottoList) {
+    this.setLottoList = setLottoList;
+  }
+  purchaseLotto(purchaseAmount) {
+    const lottoList = LottoShop.purchaseLotto(purchaseAmount);
+    this.setLottoList({ lottoList });
+    return lottoList;
+  }
+}
 function qs(selector, scope = document) {
   if (!selector) throw "no selector";
   return scope.querySelector(selector);
@@ -248,6 +260,10 @@ class Button extends Component {
   }
 }
 class AmountInput extends Component {
+  constructor(element, props) {
+    super(element, props);
+    this.lottoPurchase = new LottoPurchase(this.props.setLottoList);
+  }
   template() {
     return `
         <header class="main-header title">🎱 내 번호 당첨 확인 🎱</header> 
@@ -283,10 +299,6 @@ class AmountInput extends Component {
     Validator.validatePurchaseAmount(purchaseAmount);
     return purchaseAmount;
   }
-  getLottoList(purchaseAmount) {
-    const lottoList = LottoShop.purchaseLotto(purchaseAmount);
-    this.props.setLottoList({ lottoList });
-  }
   handleFormSubmit(event) {
     event.preventDefault();
     this.handleButtonClick();
@@ -298,7 +310,7 @@ class AmountInput extends Component {
       if (hasLottoList && !confirm(INPUT_MESSAGES.alreadyPurchased())) {
         return;
       }
-      this.getLottoList(purchaseAmount);
+      this.lottoPurchase.purchaseLotto(purchaseAmount);
     } catch (error) {
       console.error(error);
       alert(error.message);
@@ -315,7 +327,7 @@ class LottoList extends Component {
               ${this.props.lottoList.map((lotto) => {
       return `
               <span class="lotto-detail-item-number"
-                ><img src="./src/assets/ic_admit_one.png" />${lotto.numbers.join(
+                ><img src="/src/step2/assets/ic_admit_one.png" alt='로또 번호 이미지'/>${lotto.numbers.join(
         ", "
       )}</span
               >
@@ -329,6 +341,7 @@ class LottoList extends Component {
 }
 class StatisticsModal extends Component {
   template() {
+    var _a;
     return `
     <dialog class='statistics-dialog'>
         <div class='statistics-dialog-contents'>
@@ -346,7 +359,7 @@ class StatisticsModal extends Component {
             ${this.getStatisticsTemplate()}
             </ul>
           </div>
-          <div class='earning-rate'>당신의 총 수익률은 ${this.earningRate()}%입니다.
+          <div class='earning-rate'>당신의 총 수익률은 ${(_a = this.props.lottoResults) == null ? void 0 : _a.earningRate}%입니다.
           </div>
           <form class='statistics-dialog-retry-form'>
             <button class='retry-btn'>다시 시작하기</button>
@@ -367,13 +380,6 @@ class StatisticsModal extends Component {
   handleButtonClick() {
     this.props.reset();
   }
-  earningRate() {
-    const { lottoResults, lottoList } = this.props;
-    if (!lottoResults) return 0;
-    const { profit } = lottoResults;
-    const totalPurchaseAmount = lottoList.lottoList.length * 1e3;
-    return (profit / totalPurchaseAmount * 100).toFixed(1);
-  }
   getStatisticsTemplate() {
     const { ranks } = this.props.lottoResults || { ranks: [] };
     return Object.entries(LOTTO_RANK).map(([rank, { winNumber, isBonusNumberRequired, prize }]) => {
@@ -389,11 +395,11 @@ class StatisticsModal extends Component {
   }
 }
 class LottoCompany {
-  constructor(winNumbers2, bonusNumber) {
+  constructor(winNumbers, bonusNumber) {
     __privateAdd(this, _LottoCompany_instances);
     __privateAdd(this, _winNumbers);
     __privateAdd(this, _bonusNumber);
-    __privateSet(this, _winNumbers, winNumbers2);
+    __privateSet(this, _winNumbers, winNumbers);
     __privateSet(this, _bonusNumber, bonusNumber);
   }
   calculateLottoRanks(purchasedLottos) {
@@ -410,12 +416,16 @@ class LottoCompany {
       0
     );
   }
+  calculateEarningRate(lottoCount, totalProfit) {
+    const totalPurchaseAmount = lottoCount * LOTTO_PRICE;
+    return (totalProfit / totalPurchaseAmount * PERCENTAGE_MULTIPLIER).toFixed(EARNING_RATE_DECIMALS);
+  }
 }
 _winNumbers = new WeakMap();
 _bonusNumber = new WeakMap();
 _LottoCompany_instances = new WeakSet();
-getMatchCount_fn = function(lottoNumbers, winNumbers2) {
-  return getIntersectCount(lottoNumbers, winNumbers2);
+getMatchCount_fn = function(lottoNumbers, winNumbers) {
+  return getIntersectCount(lottoNumbers, winNumbers);
 };
 checkBonusNumber_fn = function(lottoNumbers) {
   return lottoNumbers.includes(__privateGet(this, _bonusNumber));
@@ -427,7 +437,32 @@ getRank_fn = function(winningLottoCount, isBonusNumber) {
   });
   return rank ?? NO_WINNING;
 };
+class LottoResult {
+  constructor(onResult, openModal) {
+    this.onResult = onResult;
+    this.openModal = openModal;
+  }
+  calculateResult(winNumbers, bonusNumber, lottoList) {
+    const lottoCompany = new LottoCompany(winNumbers, bonusNumber);
+    const lottoRanks = lottoCompany.calculateLottoRanks(lottoList);
+    const totalProfit = lottoCompany.calculateTotalProfit(lottoRanks);
+    const earningRate = lottoCompany.calculateEarningRate(
+      lottoList.length,
+      totalProfit
+    );
+    this.onResult({ lottoRanks, totalProfit, earningRate });
+    this.openModal();
+    return { lottoRanks, totalProfit, earningRate };
+  }
+}
 class UserInput extends Component {
+  constructor(element, props) {
+    super(element, props);
+    this.lottoResult = new LottoResult(
+      this.props.onResult,
+      this.props.openModal
+    );
+  }
   template() {
     return `
     <h2 class="user-input-title body">
@@ -468,39 +503,41 @@ class UserInput extends Component {
   }
   getWinNumberInputs() {
     const winNumberInputs = qsAll(".win-number");
-    const winNumbers2 = Array.from(winNumberInputs).map(
+    const winNumbers = Array.from(winNumberInputs).map(
       (input) => Number(input.value)
     );
-    Validator.validateWinNumbers(winNumbers2);
-    return winNumbers2;
+    Validator.validateWinNumbers(winNumbers);
+    return winNumbers;
   }
-  getBonusNumberInput(winNumbers2) {
-    const bonusNumberInput2 = qs(".bonus-number");
-    const bonusNumber = Number(bonusNumberInput2.value);
-    Validator.validateBonusNumber(bonusNumber, winNumbers2);
+  getBonusNumberInput(winNumbers) {
+    const bonusNumberInput = qs(".bonus-number");
+    const bonusNumber = Number(bonusNumberInput.value);
+    Validator.validateBonusNumber(bonusNumber, winNumbers);
     return bonusNumber;
+  }
+  clearInputs() {
+    const winNumberInputs = qsAll(".win-number");
+    const bonusNumberInput = qs(".bonus-number");
+    winNumberInputs.forEach((input) => {
+      input.value = "";
+    });
+    bonusNumberInput.value = "";
   }
   handleButtonClick(event) {
     try {
       event.preventDefault();
-      const winNumbers2 = this.getWinNumberInputs();
-      const bonusNumber = this.getBonusNumberInput(winNumbers2);
-      const lottoCompany = new LottoCompany(winNumbers2, bonusNumber);
-      const lottoRanks = lottoCompany.calculateLottoRanks(
+      const winNumbers = this.getWinNumberInputs();
+      const bonusNumber = this.getBonusNumberInput(winNumbers);
+      this.lottoResult.calculateResult(
+        winNumbers,
+        bonusNumber,
         this.props.lottoList.lottoList
       );
-      const totalProfit = lottoCompany.calculateTotalProfit(lottoRanks);
-      if (this.props.onResult) {
-        this.props.onResult({ lottoRanks, totalProfit });
-      }
       this.props.openModal();
     } catch (error) {
       console.error("error", error);
       alert(error.message);
-      winNumbers.forEach((input) => {
-        input.value = "";
-      });
-      bonusNumberInput.value = "";
+      this.clearInputs();
     }
   }
 }
@@ -552,11 +589,12 @@ class App extends Component {
   setLottoList(lottoList) {
     this.setState({ lottoList });
   }
-  handleLottoResult({ lottoRanks, totalProfit }) {
+  handleLottoResult({ lottoRanks, totalProfit, earningRate }) {
     this.setState({
       lottoResults: {
         ranks: lottoRanks,
-        profit: totalProfit
+        profit: totalProfit,
+        earningRate
       }
     });
   }
