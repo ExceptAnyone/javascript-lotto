@@ -317,6 +317,7 @@ class AmountInput extends Component {
     }
   }
 }
+const IcAdmitOne = "data:image/png;base64,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";
 class LottoList extends Component {
   template() {
     return `
@@ -327,7 +328,7 @@ class LottoList extends Component {
               ${this.props.lottoList.map((lotto) => {
       return `
               <span class="lotto-detail-item-number"
-                ><img src="./assets/ic_admit_one.png" alt='로또 번호 이미지'/>${lotto.numbers.join(
+                ><img src="${IcAdmitOne}" alt='로또 번호 이미지'/>${lotto.numbers.join(
         ", "
       )}</span
               >
